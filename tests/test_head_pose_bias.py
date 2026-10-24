@@ -161,16 +161,3 @@ def test_velocity_cfg_unchanged_no_gate():
 
     cfg = make_microduck_velocity_env_cfg()
     assert "gate_height_low" not in cfg.rewards["head_pose_bias"].params
-
-
-def test_velstand_inherited_term_is_gated():
-    # Velstand episodes survive falls — the inherited velocity-env term must not
-    # charge the ground phase.
-    from mjlab_microduck.tasks.microduck_velstand_env_cfg import (
-        make_microduck_velstand_env_cfg,
-    )
-
-    cfg = make_microduck_velstand_env_cfg()
-    params = cfg.rewards["head_pose_bias"].params
-    assert params.get("gate_height_low") is not None
-    assert params["gate_tilt_zero_deg"] == 40.0  # REWARD_GATE_TILT_DEG

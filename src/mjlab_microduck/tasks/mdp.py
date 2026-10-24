@@ -1779,8 +1779,11 @@ def feet_grounded_reward(
     sensor = env.scene.sensors[sensor_name]
     found = sensor.data.found  # (num_envs, num_feet) or (num_envs, 1)
     if found.dim() > 1:
+        denom = max(1, found.shape[-1])
         found = found.sum(dim=-1)  # collapse foot dimension
-    return torch.clamp(found, 0.0, 2.0) / 2.0
+    else:
+        denom = 1
+    return torch.clamp(found, 0.0, float(denom)) / float(denom)
 
 
 def body_impact_cost(
@@ -7704,3 +7707,65 @@ def roulade_lateral_velocity_penalty(
     """Body-frame lateral (y) linear velocity² — keeps the roll straight."""
     asset: Entity = env.scene[asset_cfg.name]
     return torch.nan_to_num(asset.data.root_link_lin_vel_b[:, 1].pow(2), nan=0.0)
+
+
+# ---------------------------------------------------------------------------
+# Flamingo (club teaching task)
+# ---------------------------------------------------------------------------
+def flamingo_hold_score(
+    env: ManagerBasedRlEnv,
+    target_overrides: Optional[dict] = None,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    joint_indices: Optional[list] = None,
+    pose_std: float = 0.35,
+    target_height: float = 0.115,
+    height_std: float = 0.03,
+    upright_std: float = 0.35,
+    support_sensor: str = "left_foot_stance",
+    support_index: int = 0,
+) -> torch.Tensor:
+    """Multiplicative goal score for the one-legged Flamingo hold.
+
+    The three factors are Gaussians on
+
+    * the leg joint pose (stance leg at HOME, lifted leg at the target),
+    * trunk height,
+    * trunk tilt (upright),
+
+    and the product is gated by contact on the STANCE foot. Multiplying (rather
+    than adding) the factors means any partial pose — standing on two feet,
+    hopping, leaning on the lifted foot — scores near zero: there is no
+    "80 % of everything" compromise basin. The stance-contact gate is a hard
+    state check: a score only counts while the policy is actually balancing on
+    the left foot.
+
+    This is the model reward term to copy when writing your own composite:
+    pick wide stds so the CURRENT policy scores visibly at the start, then
+    tighten once the behavior exists (see docs/02-reward-engineering.md).
+
+    Returns a value in [0, 1]; use a POSITIVE weight.
+    """
+    pose = pose_target_match(
+        env,
+        target_overrides=target_overrides,
+        asset_cfg=asset_cfg,
+        std=pose_std,
+        joint_indices=joint_indices,
+    )
+    height = height_target_gaussian(
+        env,
+        target_height=target_height,
+        asset_cfg=asset_cfg,
+        std=height_std,
+    )
+    upright = body_upright_gaussian(env, asset_cfg=asset_cfg, std=upright_std)
+
+    gate = torch.ones(env.num_envs, device=env.device)
+    if support_sensor in env.scene.sensors:
+        found = env.scene.sensors[support_sensor].data.found
+        if found.dim() > 1:
+            idx = min(support_index, found.shape[-1] - 1)
+            found = found[:, idx]
+        gate = found.to(torch.float32)
+
+    return pose * height * upright * gate

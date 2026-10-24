@@ -19,9 +19,7 @@ dependencies = [
     # BAM distribution name is `better-actuator-models`; the import stays `bam`.
     "better-actuator-models",
     "onnxruntime>=1.24.4",
-    "rustypot>=1.4.2",
     "huggingface_hub>=0.27.0",
-    "matplotlib>=3.10.9",
     # mjlab 1.3.0 imports scipy (terrains/heightfield_terrains.py) but forgets
     # to declare it — without this line a fresh `uv sync` (e.g. on HF jobs)
     # can't even `import mjlab_microduck` (found 2026-07-21).
@@ -51,8 +49,6 @@ mjlab_microduck = "mjlab_microduck.tasks"
 # --hf-jobs is intercepted from the `mjlab.tasks` entry point above
 # (train_hook.py), not here. Locked by tests/test_hf_jobs_flag.py.
 train = "mjlab_microduck.train_cli:main"
-# Serve a simulated body to the real `robotd` — see sim/body_server.py.
-duck-body = "mjlab_microduck.sim.body_server:main"
 publish = "mjlab_microduck.publish.cli:main"
 [tool.ruff]
 src = ["src"]  # Helpful for recognizing first-party imports.
